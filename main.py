@@ -85,6 +85,18 @@ def load_image_from_source(src: str) -> Image.Image | None:
         print(f"Skipping image: {e}")
         return None
 
+def get_base64_from_url(url: str) -> str | None:
+    """Fetch image from URL and convert to Base64."""
+    try:
+        response = requests.get(url, timeout=5)
+        if response.status_code == 200:
+            return base64.b64encode(response.content).decode("utf-8")
+        else:
+            return None
+    except Exception as e:
+        print(f"Failed to fetch image: {e}")
+        return None
+
 # ---------------------- API Endpoint ---------------------- #
 @app.post("/find-similar-products")
 async def find_similar_products(file: UploadFile = File(...)):
@@ -122,11 +134,21 @@ async def find_similar_products(file: UploadFile = File(...)):
                     product_max_similarity = similarity
 
             if product_max_similarity > 0.7:
+                # Convert all images to Base64
+                base64_images = []
+                for src in image_sources:
+                    if src.startswith("http"):  # Firebase URL
+                        b64 = get_base64_from_url(src)
+                        if b64:
+                            base64_images.append(b64)
+                    else:
+                        base64_images.append(src)  # already Base64
+
                 similar_products.append({
                     "id": doc.id,
                     "title": data.get("title"),
                     "price": data.get("price"),
-                    "images": image_sources,
+                    "images": base64_images,
                     "description": data.get("description"),
                     "similarity": float(product_max_similarity)
                 })
