@@ -5,18 +5,22 @@ from tensorflow.keras.applications.mobilenet_v2 import preprocess_input
 import numpy as np
 import io
 from PIL import Image
+import os
+import json
 import firebase_admin
 from firebase_admin import credentials, firestore
 import requests
 import base64
 import re
+import asyncio
+from concurrent.futures import ThreadPoolExecutor
 
 # ---------------------- FastAPI Setup ---------------------- #
-app = FastAPI()
+app = FastAPI(title="Local Marketplace Image Search API")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  
+    allow_origins=["*"],
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -24,37 +28,59 @@ app.add_middleware(
 # ---------------------- Load MobileNetV2 ---------------------- #
 base_model = MobileNetV2(weights="imagenet", include_top=False, pooling="avg")
 
+# ThreadPoolExecutor for running blocking tasks (like model prediction)
+executor = ThreadPoolExecutor(max_workers=4)
+
 # ---------------------- Firebase Setup ---------------------- #
-cred = credentials.Certificate("firebase_key.json")
-firebase_admin.initialize_app(cred)
-db = firestore.client()
+firebase_json = os.environ.get("FIREBASE_CREDENTIALS")
+
+try:
+    if firebase_json:
+        cred_dict = json.loads(firebase_json)
+        cred = credentials.Certificate(cred_dict)
+    elif os.path.exists("firebase_key.json"):
+        cred = credentials.Certificate("firebase_key.json")
+    else:
+        raise RuntimeError(
+            "Firebase credentials not found. Set FIREBASE_CREDENTIALS or place firebase_key.json in project folder."
+        )
+
+    if not firebase_admin._apps:
+        firebase_admin.initialize_app(cred)
+
+    db = firestore.client()
+except Exception as e:
+    raise RuntimeError(f"Failed to initialize Firebase: {e}")
 
 # ---------------------- Helper Functions ---------------------- #
-def get_image_features(img: Image.Image):
+def extract_features(img: Image.Image) -> np.ndarray:
+    """Blocking: Extract feature vector using MobileNetV2."""
     img = img.resize((224, 224)).convert("RGB")
     x = np.expand_dims(np.array(img), axis=0)
     x = preprocess_input(x)
     features = base_model.predict(x)
     return features[0]
 
-def cosine_similarity(a, b):
+async def get_image_features_async(img: Image.Image) -> np.ndarray:
+    """Run blocking feature extraction in a separate thread."""
+    loop = asyncio.get_running_loop()
+    features = await loop.run_in_executor(executor, extract_features, img)
+    return features
+
+def cosine_similarity(a: np.ndarray, b: np.ndarray) -> float:
     return np.dot(a, b) / (np.linalg.norm(a) * np.linalg.norm(b))
 
-def load_image_from_source(src: str):
-    """Load image from URL or base64 string."""
+def load_image_from_source(src: str) -> Image.Image | None:
     try:
-        # Remove possible data URI prefix
         if src.startswith("data:image"):
-            src = re.sub('^data:image/.+;base64,', '', src)
-
+            src = re.sub(r'^data:image/.+;base64,', '', src)
         if src.startswith("http"):
             response = requests.get(src, timeout=5)
             img = Image.open(io.BytesIO(response.content))
         else:
             img_data = base64.b64decode(src)
             img = Image.open(io.BytesIO(img_data))
-        img = img.convert("RGB")
-        return img
+        return img.convert("RGB")
     except Exception as e:
         print(f"Skipping image: {e}")
         return None
@@ -64,11 +90,13 @@ def load_image_from_source(src: str):
 async def find_similar_products(file: UploadFile = File(...)):
     try:
         if not file.content_type.startswith("image/"):
-            return {"error": "Only image files are allowed"}
+            return {"error": "Only image files are allowed."}
 
         contents = await file.read()
         uploaded_img = Image.open(io.BytesIO(contents)).convert("RGB")
-        uploaded_features = get_image_features(uploaded_img)
+
+        # Run feature extraction asynchronously
+        uploaded_features = await get_image_features_async(uploaded_img)
 
         products_ref = db.collection("products")
         docs = products_ref.stream()
@@ -88,7 +116,7 @@ async def find_similar_products(file: UploadFile = File(...)):
                 if img is None:
                     continue
 
-                features = get_image_features(img)
+                features = await get_image_features_async(img)
                 similarity = cosine_similarity(uploaded_features, features)
                 if similarity > product_max_similarity:
                     product_max_similarity = similarity
