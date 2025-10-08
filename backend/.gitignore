@@ -1,0 +1,3 @@
+backend/firebase_key.json
+.venv/
+__pycache__/
