@@ -85,12 +85,14 @@ def load_image_from_source(src: str) -> Image.Image | None:
         print(f"Skipping image: {e}")
         return None
 
-def get_base64_from_url(url: str) -> str | None:
-    """Fetch image from URL and convert to Base64."""
+def get_base64_from_url(url: str) -> dict | None:
+    """Fetch image from URL and convert to Base64 with MIME type."""
     try:
         response = requests.get(url, timeout=5)
         if response.status_code == 200:
-            return base64.b64encode(response.content).decode("utf-8")
+            content_type = response.headers.get("Content-Type", "image/jpeg")
+            b64_data = base64.b64encode(response.content).decode("utf-8")
+            return {"mime": content_type, "data": b64_data}
         else:
             return None
     except Exception as e:
@@ -134,15 +136,15 @@ async def find_similar_products(file: UploadFile = File(...)):
                     product_max_similarity = similarity
 
             if product_max_similarity > 0.7:
-                # Convert all images to Base64
+                # Convert all images to Base64 with MIME type
                 base64_images = []
                 for src in image_sources:
                     if src.startswith("http"):  # Firebase URL
-                        b64 = get_base64_from_url(src)
-                        if b64:
-                            base64_images.append(b64)
+                        b64_dict = get_base64_from_url(src)
+                        if b64_dict:
+                            base64_images.append(b64_dict)
                     else:
-                        base64_images.append(src)  # already Base64
+                        base64_images.append({"mime": "image/jpeg", "data": src})  # already Base64
 
                 similar_products.append({
                     "id": doc.id,
