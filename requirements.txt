@@ -1,8 +1,7 @@
-fastapi==0.116.0
-uvicorn[standard]==0.24.0
-tensorflow==2.18.1
-Pillow==10.1.0
-numpy==1.26.0
-firebase-admin==6.1.0
-requests==2.31.0
-python-multipart==0.0.6
+fastapi
+uvicorn
+tensorflow-cpu==2.13.0
+firebase-admin
+pillow
+requests
+python-multipart
