@@ -143,8 +143,17 @@ async def find_similar_products(file: UploadFile = File(...)):
                         b64_dict = get_base64_from_url(src)
                         if b64_dict:
                             base64_images.append(b64_dict)
-                    else:
-                        base64_images.append({"mime": "image/jpeg", "data": src})  # already Base64
+                    elif src.startswith("data:image"):  # Already a data URI
+                        # Extract the MIME type and base64 data
+                        match = re.match(r'data:([^;]+);base64,(.+)', src)
+                        if match:
+                            base64_images.append({"mime": match.group(1), "data": match.group(2)})
+                        else:
+                            base64_images.append({"mime": "image/jpeg", "data": src})
+                    else:  # Assume it's raw base64
+                        # Remove any data URI prefix if present
+                        clean_b64 = re.sub(r'^data:image/.+;base64,', '', src)
+                        base64_images.append({"mime": "image/jpeg", "data": clean_b64})
 
                 similar_products.append({
                     "id": doc.id,
