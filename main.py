@@ -37,6 +37,9 @@ firebase_json = os.environ.get("FIREBASE_CREDENTIALS")
 try:
     if firebase_json:
         cred_dict = json.loads(firebase_json)
+        # Fix the private key by replacing escaped newlines with actual newlines
+        if 'private_key' in cred_dict:
+            cred_dict['private_key'] = cred_dict['private_key'].replace('\\n', '\n')
         cred = credentials.Certificate(cred_dict)
     elif os.path.exists("firebase_key.json"):
         cred = credentials.Certificate("firebase_key.json")
@@ -135,7 +138,7 @@ async def find_similar_products(file: UploadFile = File(...)):
                 if similarity > product_max_similarity:
                     product_max_similarity = similarity
 
-            if product_max_similarity > 0.7:
+            if product_max_similarity > 0.3:
                 # Convert all images to Base64 with MIME type
                 base64_images = []
                 for src in image_sources:
