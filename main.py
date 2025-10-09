@@ -135,7 +135,7 @@ async def find_similar_products(file: UploadFile = File(...)):
                 if similarity > product_max_similarity:
                     product_max_similarity = similarity
 
-            if product_max_similarity > 0.7:
+            if product_max_similarity > 0.3:
                 # Convert all images to Base64 with MIME type
                 base64_images = []
                 for src in image_sources:
