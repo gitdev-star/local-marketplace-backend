@@ -209,5 +209,5 @@ def fetch_github_images(path=""):
 @app.get("/github-images")
 async def get_github_images():
     """Return all image URLs from GitHub repository."""
-    images = fetch_github_images()
+    images = fetch_github_images(path="models")
     return {"count": len(images), "images": images}
