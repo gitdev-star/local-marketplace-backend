@@ -112,7 +112,6 @@ async def find_similar_products(file: UploadFile = File(...)):
         contents = await file.read()
         uploaded_img = Image.open(io.BytesIO(contents)).convert("RGB")
 
-        # Run feature extraction asynchronously
         uploaded_features = await get_image_features_async(uploaded_img)
 
         products_ref = db.collection("products")
@@ -139,22 +138,19 @@ async def find_similar_products(file: UploadFile = File(...)):
                     product_max_similarity = similarity
 
             if product_max_similarity > 0.3:
-                # Convert all images to Base64 with MIME type
                 base64_images = []
                 for src in image_sources:
-                    if src.startswith("http"):  # Firebase URL
+                    if src.startswith("http"):
                         b64_dict = get_base64_from_url(src)
                         if b64_dict:
                             base64_images.append(b64_dict)
-                    elif src.startswith("data:image"):  # Already a data URI
-                        # Extract the MIME type and base64 data
+                    elif src.startswith("data:image"):
                         match = re.match(r'data:([^;]+);base64,(.+)', src)
                         if match:
                             base64_images.append({"mime": match.group(1), "data": match.group(2)})
                         else:
                             base64_images.append({"mime": "image/jpeg", "data": src})
-                    else:  # Assume it's raw base64
-                        # Remove any data URI prefix if present
+                    else:
                         clean_b64 = re.sub(r'^data:image/.+;base64,', '', src)
                         base64_images.append({"mime": "image/jpeg", "data": clean_b64})
 
@@ -172,7 +168,6 @@ async def find_similar_products(file: UploadFile = File(...)):
 
     except Exception as e:
         return {"error": str(e)}
-
 
 # ---------------------- GitHub Image Fetching ---------------------- #
 GITHUB_TOKEN = os.getenv("GITHUB_TOKEN")
@@ -195,7 +190,6 @@ def fetch_github_images(path=""):
                 if file["type"] == "file" and file["name"].lower().endswith((".png", ".jpg", ".jpeg", ".gif", ".webp")):
                     image_urls.append(file["download_url"])
                 elif file["type"] == "dir":
-                    # Recursively fetch images from subfolders
                     image_urls.extend(fetch_github_images(file["path"]))
 
             return image_urls
@@ -206,8 +200,21 @@ def fetch_github_images(path=""):
         print(f"Error fetching GitHub images: {e}")
         return []
 
+# Return GitHub images as URLs
 @app.get("/github-images")
 async def get_github_images():
-    """Return all image URLs from GitHub repository."""
     images = fetch_github_images(path="models")
     return {"count": len(images), "images": images}
+
+# Return GitHub images as Base64 (matches Firestore format)
+@app.get("/github-images-base64")
+async def get_github_images_base64():
+    github_image_urls = fetch_github_images(path="models")
+    base64_images = []
+
+    for url in github_image_urls:
+        b64_dict = get_base64_from_url(url)
+        if b64_dict:
+            base64_images.append(b64_dict)
+
+    return {"count": len(base64_images), "images": base64_images}
