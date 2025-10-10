@@ -172,3 +172,42 @@ async def find_similar_products(file: UploadFile = File(...)):
 
     except Exception as e:
         return {"error": str(e)}
+
+
+# ---------------------- GitHub Image Fetching ---------------------- #
+GITHUB_TOKEN = os.getenv("GITHUB_TOKEN")
+GITHUB_USER = "gitdev-star"
+GITHUB_REPO = "local-marketplace-images"
+GITHUB_API_URL = f"https://api.github.com/repos/{GITHUB_USER}/{GITHUB_REPO}/contents"
+
+def fetch_github_images(path=""):
+    """Fetch images recursively from GitHub repo."""
+    headers = {"Authorization": f"token {GITHUB_TOKEN}"} if GITHUB_TOKEN else {}
+    url = f"{GITHUB_API_URL}/{path}" if path else GITHUB_API_URL
+
+    try:
+        response = requests.get(url, headers=headers, timeout=10)
+        if response.status_code == 200:
+            files = response.json()
+            image_urls = []
+
+            for file in files:
+                if file["type"] == "file" and file["name"].lower().endswith((".png", ".jpg", ".jpeg", ".gif", ".webp")):
+                    image_urls.append(file["download_url"])
+                elif file["type"] == "dir":
+                    # Recursively fetch images from subfolders
+                    image_urls.extend(fetch_github_images(file["path"]))
+
+            return image_urls
+        else:
+            print(f"GitHub API error: {response.status_code}, {response.text}")
+            return []
+    except Exception as e:
+        print(f"Error fetching GitHub images: {e}")
+        return []
+
+@app.get("/github-images")
+async def get_github_images():
+    """Return all image URLs from GitHub repository."""
+    images = fetch_github_images()
+    return {"count": len(images), "images": images}
