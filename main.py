@@ -255,6 +255,7 @@ async def find_similar_products(file: UploadFile = File(...)):
                     "price": data.get("price"),
                     "images": base64_images,
                     "description": data.get("description"),
+                    "contacts": data.get("contacts", []),
                     "similarity": float(product_max_similarity),
                     "source": "github" if github_images else "firestore"
                 })
