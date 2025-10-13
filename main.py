@@ -303,6 +303,34 @@ async def root():
         "endpoints": {
             "POST /find-similar-products": "Upload image to find similar products",
             "GET /github-folders": "List all GitHub folders",
-            "GET /test-match/{product_title}": "Test GitHub folder matching"
+            "GET /test-match/{product_title}": "Test GitHub folder matching",
+            "GET /test-firestore": "Test Firestore data structure"
         }
     }
+
+@app.get("/test-firestore")
+async def test_firestore():
+    """Test endpoint to check Firestore product structure."""
+    try:
+        products_ref = db.collection("products")
+        docs = products_ref.limit(3).stream()
+        
+        products = []
+        for doc in docs:
+            data = doc.to_dict()
+            products.append({
+                "id": doc.id,
+                "title": data.get("title"),
+                "has_images": bool(data.get("images")),
+                "has_description": bool(data.get("description")),
+                "has_contacts": bool(data.get("contacts")),
+                "contacts": data.get("contacts", []),
+                "all_fields": list(data.keys())
+            })
+        
+        return {
+            "total_checked": len(products),
+            "products": products
+        }
+    except Exception as e:
+        return {"error": str(e)}
